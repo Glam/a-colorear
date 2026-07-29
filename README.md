@@ -57,7 +57,6 @@ Verify these behaviors:
 - Zoom in/out (via UI buttons or Ctrl/Cmd + wheel) and confirm drawing coordinates remain correct.
 - If your browser supports `webkitSpeechRecognition`, try voice-to-text input and confirm it populates the expected UI element.
 - Check service worker registration under DevTools → Application → Service Workers.
-
 - On tablets/phones: pulling down at the top of the page should no longer trigger a page reload (pull-to-refresh). If you still see reloads, try a hard refresh or test on another browser — older engines sometimes ignore the CSS fallback and may require the JS mitigation.
 
 ## Quick developer tips & common quick fixes
@@ -67,63 +66,10 @@ Verify these behaviors:
 - When editing `sw.js`, update its cache list to include any new static files you add.
 - Keep edits small and atomic — this is a single-file app and large refactors make diffs hard to review.
 
-## Suggested low-risk improvements
-
-
 ## How to contribute
 
 - Open a PR with focused changes. Prefer small commits.
 - When adding features that change saved state shapes (e.g., undo format), add migration notes.
 
 ## Contact / Questions
-
-
-## Recent changes (2026-03-26)
-
-Today I completed a major UI and UX overhaul to modernize the app with Material Design 3 principles and improve painting experience. Key edits:
-
-### Design & UI
-- **Material Design 3 implementation**: replaced basic CSS with Tailwind CSS + MD3 color system (primary, secondary, tertiary, surface tokens). Modern semantic colors and responsive layout.
-- **Header redesign**: integrated prompt input, generate button, undo, and new opacity slider in a cohesive top bar.
-- **Sidebar navigation**: left-side fixed toolbar with 6 brush sizes + eraser + color indicator.
-- **Color palette overhaul**:
-  - Simplified to 12 primary colors with Spanish labels (Azul, Rojo, Verde, Naranja, etc.).
-  - Added expandable modal with 24 vibrant colors (grid 8×3).
-  - Modal auto-closes after color selection.
-  - Increased vertical padding to prevent selection ring clipping.
-
-### Painting & Blend Modes
-- **Blend mode `multiply`**: colors now use `globalCompositeOperation = 'multiply'`, preserving black outlines while allowing vibrant colors (like real watercolors or markers).
-- **Opacity slider**: added interactive slider (0–100%) in header to simulate different painting techniques:
-  - 100% = Opaque paint (default)
-  - 70% = Watercolor
-  - 40% = Pencil
-  - Users can adjust in real-time.
-
-### Technical improvements
-- Canvas dimensions fixed at 800×600 (consistent with new design).
-- Canvas area behavior identical to original (no centering, clean overflow).
-- All original functionality preserved: zoom, pan, undo, image generation, voice input.
-- Responsive design with overflow handling for palette grid.
-
-### Files changed
-- `index.html` — complete redesign with MD3, Material Symbols icons, Tailwind CSS, new palette system, blend modes, and opacity control.
-- `Add an export/download button that saves the canvas as PNG — small priority.
-3. Add a minimal Playwright smoke test that checks the page loads, the canvas exists, drawing works, and the service worker registers — low/medium priority.
-4. Improve accessibility: add ARIA labels, tooltips, and keyboard shortcuts (e.g., Ctrl+Z for undo) — small priority.
-
-If you want, I can implement any of these nexnd add a tiny server-side proxy example (Node/Express) — medium priority.
-2. Polish toolbar visuals: add hover states, improved focus outlines, and accessible tooltips — small priority.
-3. Add an export/share button that downloads the canvas as PNG or uses the Web Share API on mobile — small priority.
-4. Add a minimal Playwright smoke test that checks the page loads, the canvas exists, and the service worker registers — low/medium priority.
-
-If you want, I can implement items 1 or 2 next.
-If anything in `index.html` or the other files is unclear (zoom math, undo behavior, or service worker caching), open an issue or ask for a targeted change.
-
----
-
-This README was generated from the repository's developer notes. If you'd like, I can also:
-
-- Replace the inline API key with a placeholder and add a short proxy example.
-- Add a minimal smoke test script (Playwright) and an `npm` script to run it.
 
