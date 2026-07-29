@@ -35,36 +35,6 @@ A-Colorear is a tiny single-page Progressive Web App (PWA) for creating and pain
 
 If you prefer to revert this (for compatibility with very old browsers) or to tune the behavior (for example add a small Y-threshold before preventing), open an issue and I can adjust the implementation.
 
-## Security note — API key
-
-The frontend now supports a proxy endpoint (`/api/generate-image`) so secrets are not exposed in `index.html`.
-
-Production recommendation:
-
-- Keep the real Gemini key only as `GEMINI_API_KEY` secret in Cloudflare Worker.
-- Restrict CORS with `ALLOWED_ORIGIN` in `cloudflare/wrangler.toml`.
-- Enable Cloudflare WAF + Rate Limiting on the API route.
-- Add Turnstile verification in the Worker as a next hardening step.
-
-If a key was ever committed previously, rotate it immediately.
-
-## Cloudflare production quickstart
-
-1. Deploy static frontend with Cloudflare Pages (no build step needed).
-2. Deploy Worker proxy:
-
-```bash
-cd cloudflare
-wrangler secret put GEMINI_API_KEY
-wrangler deploy
-```
-
-3. Set your frontend domain in `cloudflare/wrangler.toml` as `ALLOWED_ORIGIN`.
-4. Point frontend API to Worker:
-- Preferred: route `/api/generate-image` to the Worker from Cloudflare.
-- Quick option: set `window.IMAGE_API_PROXY` to your Workers URL.
-5. Keep `_headers` in project root so Pages applies security headers.
-
 ## Manual testing / verification
 
 To test the app locally, serve it from a static HTTP server (file:// may block some features like service workers):
