@@ -1,0 +1,7 @@
+name = "a-colorear-image-proxy"
+main = "worker.mjs"
+compatibility_date = "2026-07-28"
+
+# Reemplaza con tu dominio de Pages cuando despliegues.
+[vars]
+ALLOWED_ORIGIN = "https://REPLACE_WITH_YOUR_DOMAIN"
