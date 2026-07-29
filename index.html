@@ -445,8 +445,8 @@
   const modalGrid = document.getElementById('modal-grid');
   const colorPaletteModal = document.getElementById('color-palette-modal');
   const modalCloseBtn = document.getElementById('modal-close-btn');
-  // En produccion apunta este endpoint al Worker (por defecto usa misma origin).
-  const IMAGE_API_PROXY = window.IMAGE_API_PROXY || '/api/generate-image';
+  // En producción usamos la URL del Worker directamente para evitar el problema de rutas de Pages.
+  const IMAGE_API_PROXY = window.IMAGE_API_PROXY || 'https://a-colorear.jlquintero.workers.dev';
   
   let currentColor = primaryColors[0].color;
 
