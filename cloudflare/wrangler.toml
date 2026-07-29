@@ -4,4 +4,4 @@ compatibility_date = "2026-07-28"
 
 # Reemplaza con tu dominio de Pages cuando despliegues.
 [vars]
-ALLOWED_ORIGIN = "https://a-colorear.pages.dev/"
+ALLOWED_ORIGIN = "https://a-colorear.pages.dev"
