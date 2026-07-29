@@ -1,4 +1,4 @@
-name = "a-colorear-image-proxy"
+name = 'a-colorear'
 main = "worker.mjs"
 compatibility_date = "2026-07-28"
 
