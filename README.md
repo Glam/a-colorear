@@ -1,12 +1,12 @@
 # A-Colorear — In-Browser Coloring Book (PWA)
 
-A-Colorear is a tiny single-page Progressive Web App (PWA) for creating and painting coloring-book pages directly in the browser. The app is intentionally small and self-contained: all UI, styles and client-side logic live in `index.html`. This README summarizes the app features, developer notes, testing instructions and a brief security note about the embedded API key.
+A-Colorear is a tiny single-page Progressive Web App (PWA) for creating and painting coloring-book pages directly in the browser. The app is intentionally small and self-contained: all UI, styles and client-side logic live in `index.html`. This README summarizes the app features, developer notes and testing instructions.
 
 ## Key files
 
 - `index.html` — The entire app UI and JavaScript. Contains canvas drawing/painting logic, palette generation, zoom handling, undo stack, image generation calls, and optional voice-to-text support.
 - `manifest.json` — PWA metadata and icons used for installability.
-- `sw.js` — Minimal service worker used for caching and offline fallback.
+- `sw.js` — Service worker used for caching and offline fallback.
 
 ## Features (brief)
 
@@ -73,3 +73,4 @@ Verify these behaviors:
 
 ## Contact / Questions
 
+- José Luis Quintero: jlquintero(at)gmail.com
