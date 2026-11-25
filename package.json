@@ -1,0 +1,9 @@
+{
+  "name": "a-colorear",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev . --port 8788",
+    "dev:worker": "cd cloudflare && wrangler dev --port 8787",
+    "deploy:worker": "cd cloudflare && wrangler deploy"
+  }
+}

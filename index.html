@@ -449,7 +449,10 @@
   const colorPaletteModal = document.getElementById('color-palette-modal');
   const modalCloseBtn = document.getElementById('modal-close-btn');
   // En producción usamos la URL del Worker directamente para evitar el problema de rutas de Pages.
-  const IMAGE_API_PROXY = window.IMAGE_API_PROXY || 'https://a-colorear.jlquintero.workers.dev';
+  // En local (npm run dev) usamos el Worker local de `wrangler dev`.
+  const IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const IMAGE_API_PROXY = window.IMAGE_API_PROXY
+    || (IS_LOCAL ? 'http://localhost:8787' : 'https://a-colorear.jlquintero.workers.dev');
   
   let currentColor = primaryColors[0].color;
 
