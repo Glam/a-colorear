@@ -1,3 +1,4 @@
+const MAX_PROMPT_LENGTH = 300;
 const MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
 
 function corsHeaders(origin, allowedOrigin) {
@@ -34,6 +35,20 @@ export default {
       return json({ error: "Method not allowed" }, 405, c);
     }
 
+    // Solo aceptamos peticiones desde la web de la app (bloquea otras webs y scripts simples).
+    if (allowedOrigin && origin !== allowedOrigin) {
+      return json({ error: "Origen no permitido" }, 403, c);
+    }
+
+    // Límite por IP y tope global por minuto para proteger el crédito de Gemini.
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+    if (env.IP_LIMITER && !(await env.IP_LIMITER.limit({ key: ip })).success) {
+      return json({ error: "Has pedido muchos dibujos seguidos. Espera un minuto y vuelve a intentarlo." }, 429, { ...c, "Retry-After": "60" });
+    }
+    if (env.GLOBAL_LIMITER && !(await env.GLOBAL_LIMITER.limit({ key: "global" })).success) {
+      return json({ error: "Hay mucha gente dibujando ahora mismo. Inténtalo en un minuto." }, 429, { ...c, "Retry-After": "60" });
+    }
+
     if (!env.GEMINI_API_KEY) {
       return json({ error: "Missing GEMINI_API_KEY secret" }, 500, c);
     }
@@ -48,6 +63,9 @@ export default {
     const prompt = String(payload?.prompt || "").trim();
     if (!prompt) {
       return json({ error: "prompt is required" }, 400, c);
+    }
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return json({ error: `La descripción es demasiado larga (máximo ${MAX_PROMPT_LENGTH} caracteres).` }, 400, c);
     }
 
     const geminiPayload = {
@@ -74,11 +92,8 @@ export default {
 
       const geminiData = await geminiResp.json();
       if (!geminiResp.ok) {
-        return json(
-          { error: "Gemini request failed", details: geminiData },
-          geminiResp.status,
-          c
-        );
+        console.error("Gemini error", geminiResp.status, JSON.stringify(geminiData));
+        return json({ error: "Gemini request failed" }, 502, c);
       }
 
       const imageBase64 = geminiData?.candidates?.[0]?.content?.parts?.find(
@@ -86,7 +101,8 @@ export default {
       )?.inlineData?.data;
 
       if (!imageBase64) {
-        return json({ error: "No image data returned", details: geminiData }, 502, c);
+        console.error("Gemini returned no image", JSON.stringify(geminiData));
+        return json({ error: "No image data returned" }, 502, c);
       }
 
       return json({ imageBase64 }, 200, c);
