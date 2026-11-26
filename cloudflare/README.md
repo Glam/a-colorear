@@ -15,6 +15,7 @@ From project root:
 ```bash
 cd cloudflare
 wrangler secret put GEMINI_API_KEY
+wrangler secret put TURNSTILE_SECRET   # secret key del widget Turnstile
 wrangler deploy
 ```
 

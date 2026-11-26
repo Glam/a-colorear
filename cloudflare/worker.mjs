@@ -1,6 +1,24 @@
 const MAX_PROMPT_LENGTH = 300;
 const MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
 
+const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+async function verifyTurnstile(token, ip, secret) {
+  const form = new FormData();
+  form.append("secret", secret);
+  form.append("response", token);
+  if (ip) form.append("remoteip", ip);
+  try {
+    const resp = await fetch(TURNSTILE_VERIFY_URL, { method: "POST", body: form });
+    const outcome = await resp.json();
+    if (!outcome.success) console.warn("Turnstile rejected", JSON.stringify(outcome["error-codes"]));
+    return outcome.success === true;
+  } catch (err) {
+    console.error("Turnstile verify failed", err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
 function corsHeaders(origin, allowedOrigin) {
   const allowOrigin = allowedOrigin && origin === allowedOrigin ? origin : allowedOrigin || "*";
   return {
@@ -66,6 +84,15 @@ export default {
     }
     if (prompt.length > MAX_PROMPT_LENGTH) {
       return json({ error: `La descripción es demasiado larga (máximo ${MAX_PROMPT_LENGTH} caracteres).` }, 400, c);
+    }
+
+    // Verificación anti-bots: sin token válido de Turnstile no llamamos a Gemini.
+    if (!env.TURNSTILE_SECRET) {
+      return json({ error: "Missing TURNSTILE_SECRET secret" }, 500, c);
+    }
+    const turnstileToken = String(payload?.turnstileToken || "");
+    if (!turnstileToken || !(await verifyTurnstile(turnstileToken, ip, env.TURNSTILE_SECRET))) {
+      return json({ error: "No pudimos verificar que eres una persona. Recarga la página e inténtalo de nuevo." }, 403, c);
     }
 
     const geminiPayload = {

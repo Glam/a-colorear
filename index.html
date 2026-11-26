@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <script id="tailwind-config">
     tailwind.config = {
       darkMode: "class",
@@ -291,6 +292,8 @@
       Generar
     </button>
   </div>
+  <!-- Turnstile: invisible salvo que Cloudflare necesite pedir una verificación. -->
+  <div id="turnstile" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;"></div>
   <div class="flex items-center gap-8 ml-8">
     <button id="undo-btn" class="flex flex-col items-center gap-1 group cursor-pointer" title="Deshacer">
       <span class="material-symbols-outlined text-[#5a5c5d] group-hover:text-primary transition-colors">undo</span>
@@ -453,7 +456,37 @@
   const IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
   const IMAGE_API_PROXY = window.IMAGE_API_PROXY
     || (IS_LOCAL ? 'http://localhost:8787' : 'https://a-colorear.jlquintero.workers.dev');
-  
+
+  // --- Turnstile (verificación anti-bots que exige el Worker) ---
+  // En local usamos la clave de pruebas de Cloudflare, que siempre aprueba.
+  const TURNSTILE_SITE_KEY = IS_LOCAL ? '1x00000000000000000000AA' : '0x4AAAAAAGTtEUZOEQqHL-4z';
+  let turnstileWidgetId = null;
+  let turnstilePending = null;
+
+  function getTurnstileToken() {
+    if (!window.turnstile) {
+      return Promise.reject(new Error('No se pudo cargar la verificación de seguridad. Si usas un bloqueador de anuncios, desactívalo para esta web y recarga la página.'));
+    }
+    return new Promise((resolve, reject) => {
+      turnstilePending = { resolve, reject };
+      if (turnstileWidgetId === null) {
+        turnstileWidgetId = window.turnstile.render('#turnstile', {
+          sitekey: TURNSTILE_SITE_KEY,
+          execution: 'execute',
+          appearance: 'interaction-only',
+          callback: (token) => { turnstilePending?.resolve(token); turnstilePending = null; },
+          'error-callback': () => { turnstilePending?.reject(new Error('No pudimos verificar que eres una persona. Recarga la página e inténtalo de nuevo.')); turnstilePending = null; },
+          'timeout-callback': () => { turnstilePending?.reject(new Error('La verificación tardó demasiado. Inténtalo de nuevo.')); turnstilePending = null; }
+        });
+      }
+      window.turnstile.execute(turnstileWidgetId);
+    });
+  }
+
+  function resetTurnstile() {
+    if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+  }
+
   let currentColor = primaryColors[0].color;
 
   // --- Crear barra principal con 12 colores + botón MORE ---
@@ -735,13 +768,15 @@
     }
 
     try {
+      const turnstileToken = await getTurnstileToken();
       const response = await fetch(IMAGE_API_PROXY, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          prompt
+          prompt,
+          turnstileToken
         })
       });
 
@@ -769,6 +804,9 @@
       alert("Error al generar la imagen.\n\n" + (error?.message || error));
       console.error("Error de red o ejecución:", error);
       document.getElementById('spinner').style.display = 'none';
+    } finally {
+      // Cada token de Turnstile solo vale una vez.
+      resetTurnstile();
     }
   }
 
