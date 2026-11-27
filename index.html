@@ -2,7 +2,7 @@
 <html class="light" lang="es">
 <head>
   <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
   <meta name="theme-color" content="#005e9f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -83,6 +83,8 @@
   <style>
     html, body { 
       overscroll-behavior-y: none;
+      /* Sin zoom del navegador por pellizco ni doble toque: solo se amplía el lienzo. */
+      touch-action: pan-x pan-y;
       -webkit-overflow-scrolling: touch;
     }
     body { 
@@ -103,6 +105,7 @@
       height: 600px;
     }
     #canvas-area {
+      touch-action: none;
       position: relative;
       overflow: auto;
       overscroll-behavior: none;
@@ -288,7 +291,7 @@
         <span class="material-symbols-outlined">mic</span>
       </button>
     </div>
-    <button id="generate-btn" class="bg-gradient-to-br from-primary to-primary-container text-white px-8 py-3 rounded-full font-bold tracking-tight hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20 cursor-pointer">
+    <button id="generate-btn" class="bg-gradient-to-br from-primary to-primary-container text-white px-8 py-3 rounded-full font-bold tracking-tight hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20 cursor-pointer disabled:opacity-50 disabled:cursor-wait disabled:hover:scale-100">
       Generar
     </button>
   </div>
@@ -298,10 +301,6 @@
     <button id="undo-btn" class="flex flex-col items-center gap-1 group cursor-pointer" title="Deshacer">
       <span class="material-symbols-outlined text-[#5a5c5d] group-hover:text-primary transition-colors">undo</span>
       <span class="text-[10px] font-bold text-[#5a5c5d]">deshacer</span>
-    </button>
-    <button class="flex flex-col items-center gap-1 group cursor-pointer" title="Configuración">
-      <span class="material-symbols-outlined text-[#5a5c5d] group-hover:text-primary transition-colors">settings</span>
-      <span class="text-[10px] font-bold text-[#5a5c5d]">config</span>
     </button>
   </div>
 </header>
@@ -628,10 +627,12 @@
   document.getElementById('eraser').onclick = function(e) {
     isErasing = true;
     selectTool(this);
-    // Doble tap para borrar todo
+    // Doble tap para quitar todos los colores (el dibujo se conserva y se puede deshacer)
     const now = Date.now();
     if (now - lastEraserTap < 400) {
-      clearCanvas();
+      lastEraserTap = 0;
+      clearColors();
+      return;
     }
     lastEraserTap = now;
   };
@@ -648,7 +649,7 @@
   // --- Canvas para colorear ---
   const canvas = document.getElementById('coloring-canvas');
   const ctx = canvas.getContext('2d');
-  let drawing = false, lastX = 0, lastY = 0;
+  let drawing = false;
 
   // --- Undo stack ---
   let undoStack = [];
@@ -667,10 +668,24 @@
       img.src = undoStack.pop();
     }
   }
-  function clearCanvas() {
+  // Dibujo original generado, para poder quitar los colores sin perderlo.
+  let lineArtImage = null;
+
+  // Dibuja la imagen centrada y sin deformar sobre fondo blanco.
+  function drawLineArt(img) {
+    const s = Math.min(canvas.width / img.width, canvas.height / img.height);
+    const w = img.width * s, h = img.height * s;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+  }
+
+  function clearColors() {
+    if (!confirm('¿Quitar todos los colores?')) return;
+    saveState();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    undoStack = [];
-    protectedPixels = new Uint8ClampedArray(0);
+    if (lineArtImage) drawLineArt(lineArtImage);
+    buildProtectedPixelMap();
   }
 
   // --- Detección de bordes negros protegidos ---
@@ -705,9 +720,55 @@
     return pixelIndex >= 0 && pixelIndex < protectedPixels.length && protectedPixels[pixelIndex] === 1;
   }
 
+  // Cada trazo se redibuja entero sobre la imagen previa: así la opacidad es
+  // uniforme dentro del trazo y no aparecen puntos más oscuros en las uniones.
+  let strokeBase = null;
+  let strokePoints = [];
+  let strokeRenderPending = false;
+
   function startDraw(x, y) {
     saveState();
-    drawing = true; lastX = x; lastY = y;
+    strokeBase = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    strokePoints = [];
+    drawing = true;
+    addStrokePoint(x, y);
+  }
+
+  function addStrokePoint(x, y) {
+    if (!isErasing && isPixelProtected(x, y)) return;
+    strokePoints.push({ x, y });
+    if (!strokeRenderPending) {
+      strokeRenderPending = true;
+      requestAnimationFrame(renderStroke);
+    }
+  }
+
+  function renderStroke() {
+    strokeRenderPending = false;
+    if (!strokeBase || strokePoints.length === 0) return;
+    ctx.putImageData(strokeBase, 0, 0);
+    ctx.save();
+    ctx.strokeStyle = isErasing ? "#fff" : currentColor;
+    ctx.globalAlpha = isErasing ? 1 : currentOpacity;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineWidth = currentWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(strokePoints[0].x, strokePoints[0].y);
+    for (const p of strokePoints) ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Descarta el trazo en curso (p. ej. al apoyar un segundo dedo para hacer zoom).
+  function cancelStroke() {
+    if (!drawing) return;
+    drawing = false;
+    strokePoints = [];
+    if (strokeBase) ctx.putImageData(strokeBase, 0, 0);
+    strokeBase = null;
+    undoStack.pop();
   }
   
   function getCanvasCoordsFromEvent(e) {
@@ -717,55 +778,64 @@
     return { x, y };
   }
   
-  function draw(x, y) {
+  function endDraw() {
     if (!drawing) return;
-    
-    if (!isErasing && isPixelProtected(x, y)) {
-      return;
-    }
-    
-    ctx.save();
-    ctx.strokeStyle = isErasing ? "#fff" : currentColor;
-    ctx.globalAlpha = isErasing ? 1 : currentOpacity;
-    // Con "source" la pluma mantiene opacidad estable al repasar y evita oscurecer solapes.
-    ctx.globalCompositeOperation = isErasing ? "source-over" : "source";
-    ctx.lineWidth = currentWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(lastX, lastY);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    ctx.restore();
-    lastX = x; lastY = y;
+    if (strokeRenderPending) renderStroke();
+    drawing = false;
+    strokeBase = null;
+    strokePoints = [];
   }
-  
-  function endDraw() { drawing = false; }
+
+  // Solo dibuja el primer dedo/puntero; si aparece un segundo, es un gesto de zoom.
+  const activePointers = new Set();
+  let drawPointerId = null;
 
   canvas.addEventListener('pointerdown', e => {
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1) {
+      cancelStroke();
+      drawPointerId = null;
+      return;
+    }
+    drawPointerId = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
     const p = getCanvasCoordsFromEvent(e);
     startDraw(p.x, p.y);
   });
   canvas.addEventListener('pointermove', e => {
-    if (!drawing) return;
+    if (!drawing || e.pointerId !== drawPointerId) return;
     const p = getCanvasCoordsFromEvent(e);
-    draw(p.x, p.y);
+    addStrokePoint(p.x, p.y);
   });
-  canvas.addEventListener('pointerup', endDraw);
-  canvas.addEventListener('pointerleave', endDraw);
+  function onPointerEnd(e) {
+    activePointers.delete(e.pointerId);
+    if (e.pointerId !== drawPointerId) return;
+    drawPointerId = null;
+    if (e.type === 'pointercancel') cancelStroke();
+    else endDraw();
+  }
+  canvas.addEventListener('pointerup', onPointerEnd);
+  canvas.addEventListener('pointercancel', onPointerEnd);
 
   // --- Generación de imagen para colorear ---
+  const generateBtn = document.getElementById('generate-btn');
+  let isGenerating = false;
+
   async function generateImage(prompt) {
+    if (!prompt) {
+      alert("Por favor ingresa un prompt.");
+      return;
+    }
+    // Evita peticiones duplicadas (cada una gasta crédito de Gemini).
+    if (isGenerating) return;
+    isGenerating = true;
+    generateBtn.disabled = true;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     undoStack = [];
     protectedPixels = new Uint8ClampedArray(0);
+    lineArtImage = null;
     document.getElementById('spinner').style.display = 'block';
-
-    if (!prompt) {
-      alert("Por favor ingresa un prompt.");
-      document.getElementById('spinner').style.display = 'none';
-      return;
-    }
 
     try {
       const turnstileToken = await getTurnstileToken();
@@ -790,7 +860,8 @@
       if (base64Image) {
         const img = new Image();
         img.onload = () => {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          lineArtImage = img;
+          drawLineArt(img);
           buildProtectedPixelMap();
           document.getElementById('spinner').style.display = 'none';
         };
@@ -807,13 +878,23 @@
     } finally {
       // Cada token de Turnstile solo vale una vez.
       resetTurnstile();
+      isGenerating = false;
+      generateBtn.disabled = false;
     }
   }
 
-  document.getElementById('generate-btn').onclick = () => {
-    const prompt = document.getElementById('prompt').value.trim();
+  const promptInput = document.getElementById('prompt');
+  function generateFromInput() {
+    const prompt = promptInput.value.trim();
     if (prompt) generateImage(prompt);
-  };
+  }
+  generateBtn.onclick = generateFromInput;
+  promptInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      generateFromInput();
+    }
+  });
 
   // --- Voz a texto ---
   document.getElementById('voice-btn').onclick = () => {
@@ -832,6 +913,23 @@
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // --- Zoom: lógica y eventos ---
+  // Como en Photoshop: el pellizco solo amplía el lienzo (dentro de su zona);
+  // la interfaz nunca se amplía.
+  const canvasArea = document.getElementById('canvas-area');
+
+  // Pellizco en trackpad (Chrome/Edge/Firefox) y Ctrl+rueda llegan como "wheel" con ctrlKey.
+  document.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) e.preventDefault();
+  }, { passive: false });
+  // Safari (iOS y trackpad de Mac) usa eventos "gesture" propios.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(type =>
+    document.addEventListener(type, e => e.preventDefault(), { passive: false })
+  );
+  // Pellizco táctil fuera de la zona del lienzo.
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length > 1 && !canvasArea.contains(e.target)) e.preventDefault();
+  }, { passive: false });
+
   let scale = 1;
   const minScale = 0.5, maxScale = 3.0, scaleStep = 1.15;
   
@@ -869,11 +967,14 @@
   function setScale(newScale, focal) {
     const clamped = Math.max(minScale, Math.min(maxScale, newScale));
     if (focal && clamped !== scale) {
+      // El rect ya incluye la traslación actual: la posición sin transformar es rect - trans.
       const rect = canvas.getBoundingClientRect();
-      const localX = (focal.clientX - rect.left - transX) / scale;
-      const localY = (focal.clientY - rect.top - transY) / scale;
-      transX = focal.clientX - rect.left - localX * clamped;
-      transY = focal.clientY - rect.top - localY * clamped;
+      const originX = rect.left - transX;
+      const originY = rect.top - transY;
+      const localX = (focal.clientX - rect.left) / scale;
+      const localY = (focal.clientY - rect.top) / scale;
+      transX = focal.clientX - originX - localX * clamped;
+      transY = focal.clientY - originY - localY * clamped;
     }
     scale = clamped;
     applyTransform();
@@ -885,7 +986,7 @@
     scale = 1; transX = 0; transY = 0; applyTransform();
   };
 
-  canvas.addEventListener('wheel', e => {
+  canvasArea.addEventListener('wheel', e => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = Math.sign(e.deltaY);
@@ -894,14 +995,28 @@
     }
   }, { passive: false });
 
+  function zoomActionForKey(e) {
+    if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') return 'in';
+    if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') return 'out';
+    if (e.key === '0' || e.code === 'Numpad0') return 'reset';
+    return null;
+  }
+
   document.addEventListener('keydown', e => {
-    if ((e.key === '+' || (e.key === '=' && e.shiftKey))) {
-      setScale(scale * scaleStep);
-    } else if (e.key === '-') {
-      setScale(scale / scaleStep);
-    } else if (e.key === '0') {
-      scale = 1; transX = 0; transY = 0; applyTransform();
+    if (e.altKey) return;
+    const action = zoomActionForKey(e);
+    if (!action) return;
+    const withCmd = e.ctrlKey || e.metaKey;
+    // Como en Photoshop: Cmd/Ctrl + / - / 0 amplían el lienzo, nunca la página
+    // (funciona también mientras se escribe). Sin Cmd, solo fuera del cuadro de texto.
+    if (withCmd) {
+      e.preventDefault();
+    } else if (e.target.closest('input, textarea, [contenteditable]')) {
+      return;
     }
+    if (action === 'in') setScale(scale * scaleStep);
+    else if (action === 'out') setScale(scale / scaleStep);
+    else { scale = 1; transX = 0; transY = 0; applyTransform(); }
   });
 
   // --- Pinch gesture support for mobile ---
@@ -920,9 +1035,9 @@
     return { clientX: (t1.clientX + t2.clientX) / 2, clientY: (t1.clientY + t2.clientY) / 2 };
   }
 
-  canvas.addEventListener('touchstart', e => {
+  canvasArea.addEventListener('touchstart', e => {
     if (e.touches.length === 2) {
-      endDraw();
+      cancelStroke();
       pinchStartDistance = getPinchDistance(e.touches[0], e.touches[1]);
       pinchStartScale = scale;
       pinchCenter = getPinchCenter(e.touches[0], e.touches[1]);
@@ -931,7 +1046,7 @@
     }
   }, { passive: false });
 
-  canvas.addEventListener('touchmove', e => {
+  canvasArea.addEventListener('touchmove', e => {
     if (e.touches.length === 2 && pinchStartDistance > 0) {
       const currentDistance = getPinchDistance(e.touches[0], e.touches[1]);
       const currentCenter = getPinchCenter(e.touches[0], e.touches[1]);
@@ -952,7 +1067,7 @@
     }
   }, { passive: false });
 
-  canvas.addEventListener('touchend', e => {
+  canvasArea.addEventListener('touchend', e => {
     if (e.touches.length < 2) {
       pinchStartDistance = 0;
       pinchCenter = null;

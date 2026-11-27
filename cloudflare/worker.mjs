@@ -105,7 +105,8 @@ export default {
           ]
         }
       ],
-      generationConfig: { temperature: 0.4 }
+      // 4:3 coincide con el lienzo de 800×600, así el dibujo no se deforma.
+      generationConfig: { temperature: 0.4, imageConfig: { aspectRatio: "4:3" } }
     };
 
     try {
